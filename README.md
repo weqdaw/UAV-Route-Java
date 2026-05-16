@@ -1,363 +1,356 @@
-# 航点优化 API（Spring Boot 版本）
+# Waypoint Optimization API (Spring Boot Version)
 
-基于 Spring Boot 的无人机航点优化服务，使用先进的算法包括网格扫描、集合覆盖优化和 TSP 路径规划。
+A drone waypoint optimization service based on Spring Boot, using advanced algorithms including grid scanning, set coverage optimization, and TSP path planning.
 
-## 目录
+## Features
 
-- [功能特性](#功能特性)
-- [算法概述](#算法概述)
-- [环境要求](#环境要求)
-- [快速开始](#快速开始)
-- [API 文档](#api-文档)
-- [前端集成](#前端集成)
-- [参数说明](#参数说明)
-- [项目结构](#项目结构)
-- [开发指南](#开发指南)
+- **Grid-based Candidate Point Generation**: Generates waypoint candidate locations using a grid scanning algorithm.
+- **Set Coverage Optimization**: Reduces the number of waypoints while maintaining coverage using a greedy set coverage algorithm.
+- **TSP Path Planning**: Optimizes waypoint sequences using a Traveling Salesman Problem (TSP) solver (OR-Tools).
+- **Camera Model Support**: Supports multiple camera modes (wide, medium_tele, tele), accurately calculating GSD.
+- **Configurable Parameters**: Adjustable parameters such as overlap rate, flight altitude, and gimbal pitch angle.
+- **RESTful API**: REST interface based on Spring Boot.
+- **Statistics**: Returns optimization statistics, including reduction rate and coverage.
+  
+  ## Algorithm Overview
+  
+  The optimization process consists of three main stages:
 
-## 功能特性
+### 1. Grid Candidate Point Generation
 
-- 🎯 **基于网格的候选点生成**：使用栅格扫描算法生成航点候选位置
-- 📐 **集合覆盖优化**：使用贪心集合覆盖算法减少航点数量，同时保持覆盖范围
-- 🗺️ **TSP 路径规划**：使用旅行商问题（TSP）求解器优化航点序列（OR-Tools）
-- 📷 **相机模型支持**：支持多种相机模式（wide、medium_tele、tele），精确计算 GSD
-- ⚙️ **可配置参数**：可调整重叠率、飞行高度、云台俯仰角等参数
-- 🌐 **RESTful API**：基于 Spring Boot 的 REST 接口
-- 📊 **统计信息**：返回优化统计信息，包括减少率和覆盖率
+- Calculate camera coverage based on flight altitude and gimbal pitch angle
+- Generate candidate waypoint mesh using raster scanning
+- Filter candidate points, retaining only those within polygon boundaries
+- Support serpentine scanning mode to improve coverage efficiency
 
-## 算法概述
+### 2. Set Coverage Optimization (Optional)
 
-优化过程分为三个主要阶段：
+- Divide the polygon into a cell mesh
+- Calculate the coverage matrix: which candidate points cover which cells
+- Select the waypoint with the fewest cells covering all cells using a greedy algorithm
+- Significantly reduce the number of waypoints while maintaining complete coverage
 
-### 1. 网格候选点生成
-- 根据飞行高度和云台俯仰角计算相机覆盖范围
-- 使用栅格扫描生成候选航点网格
-- 过滤候选点，仅保留多边形边界内的点
-- 支持蛇形扫描模式以提高覆盖效率
+### 3. TSP Path Optimization (Optional)
 
-### 2. 集合覆盖优化（可选）
-- 将多边形划分为单元网格
-- 计算覆盖矩阵：哪些候选点覆盖哪些单元
-- 使用贪心算法选择覆盖所有单元的最少航点
-- 在保持完整覆盖的同时显著减少航点数量
+- Calculate the distance matrix between selected waypoints
+- Solve the Traveling Salesman Problem using OR-Tools (back to nearest neighbor algorithm)
+- Sort waypoints to minimize the total flight path distance
 
-### 3. TSP 路径优化（可选）
-- 计算所选航点之间的距离矩阵
-- 使用 OR-Tools 求解旅行商问题（回退到最近邻算法）
-- 对航点进行排序以最小化总飞行路径距离
-
-## 环境要求
+## Environment Requirements
 
 - Java 21+
 - Maven 3.6+
 
-## 快速开始
+## Quick Start
 
-### 安装依赖
+### Install Dependencies
 
 ```bash
 cd java-route
 mvn clean install
 ```
 
-### 启动服务
+### Start the service
 
 ```bash
 mvn spring-boot:run
 ```
 
-或者先编译再运行：
+Or compile first and then run:
 
 ```bash
 mvn clean package
 java -jar target/java-route-0.0.1-SNAPSHOT.jar
 ```
 
-服务默认启动在 `http://localhost:9527`
+The service starts at `http://localhost:9527` by default.
 
-### 可用端点
+### Available endpoints
 
-- **健康检查**：http://localhost:9527/health
-- **根路径**：http://localhost:9527/
-- **优化接口**：http://localhost:9527/api/v1/wayline/optimize
-
-### 配置说明
-
-配置文件位于 `src/main/resources/application.properties`：
+- **Health check**: http://localhost:9527/health
+- **Root path**: http://localhost:9527/
+- **Optimize API**: http://localhost:9527/api/v1/wayline/optimize
+  
+  ### Configuration instructions
+  
+  The configuration file is located at `src/main/resources/application.properties`:
 
 ```properties
-# 服务器配置
+# Server configuration
 server.port=9527
 server.address=0.0.0.0
 
-# API配置
-app.api.title=航点优化API
+# API Configuration
+app.api.title=Waypoint Optimization API
 app.api.version=1.0.0
 
-# CORS配置
+# CORS Configuration
 app.cors.allowed-origins=*
 
-# 算法默认参数
+# Algorithm Default Parameters
 app.algorithm.default-overlap-front=0.6
 app.algorithm.default-overlap-side=0.4
 app.algorithm.default-camera-mode=wide
 app.algorithm.default-cell-size-factor=0.5
 ```
 
-## API 文档
+## API Documentation
 
 ### POST `/api/v1/wayline/optimize`
 
-优化多边形区域的航点。
+Optimizes waypoints in polygonal regions.
 
-#### 请求体
+#### Request body
 
 ```json
-{
-  "polygon_coords": [
-    {"longitude": 116.3974, "latitude": 39.9093},
-    {"longitude": 116.4074, "latitude": 39.9093},
-    {"longitude": 116.4074, "latitude": 39.9193},
-    {"longitude": 116.3974, "latitude": 39.9193}
-  ],
-  "flight_height_m": 100,
-  "gsd_cm": 2.5,
-  "overlap_front": 0.6,
-  "overlap_side": 0.4,
-  "gimbal_pitch": -90,
-  "main_angle": 0,
-  "camera_mode": "wide",
-  "use_set_cover": true,
-  "use_tsp": true
+{ 
+"polygon_coords": [ 
+{"longitude": 116.3974, "latitude": 39.9093}, 
+{"longitude": 116.4074, "latitude": 39.9093}, 
+{"longitude": 116.4074, "latitude": 39.9193}, 
+{"longitude": 116.3974, "latitude": 39.9193} 
+], 
+"flight_height_m": 100, 
+"gsd_cm": 2.5, 
+"overlap_front": 0.6, 
+"overlap_side": 0.4, 
+"gimbal_pitch": -90, 
+"main_angle": 0, 
+"camera_mode": "wide", 
+"use_set_cover": true, "use_tsp": true
 }
 ```
 
-#### 响应
+#### Response
 
 ```json
 {
-  "code": 0,
-  "message": "success",
-  "data": {
-    "waypoints": [
-      {
-        "lng": 116.3974,
-        "lat": 39.9093,
-        "height": 100,
-        "pitch": -90
-      }
-    ],
-    "stats": {
-      "total_candidates": 150,
-      "selected_waypoints": 45,
-      "reduction_rate": 0.7,
-      "coverage_rate": 1.0
-    }
-  }
+"code": 0,
+"message": "success",
+"data": {
+"waypoints": [
+{
+"lng": 116.3974,
+"lat": 39.9093,
+"height": 100,
+"pitch": -90
+}
+],
+"stats": {
+"total_candidates": 150,
+"selected_waypoints": 45,
+"reduction_rate": 0.7,
+"coverage_rate": 1.0
+}
+}
 }
 ```
 
-#### 响应码说明
+#### Response Code Explanation
 
-- `code: 0` - 成功
-- `code: 400` - 请求参数错误
-- `code: 500` - 服务器内部错误
+- `code: 0` - Success
+- `code: 400` - Incorrect request parameters
+- `code: 500` - Internal server error
 
 ### GET `/health`
 
-健康检查接口，返回服务状态。
+The health check interface returns the service status.
 
-#### 响应
+#### Response
 
 ```json
-{
-  "status": "ok",
-  "service": "wayline-optimizer",
-  "version": "1.0.0"
+{ 
+"status": "ok", 
+"service": "wayline-optimizer", 
+"version": "1.0.0"
 }
 ```
 
-## 前端集成
+## Front-end integration
 
-### TypeScript 接口定义
+### TypeScript interface definition
 
 ```typescript
-interface PolygonPoint {
-  longitude: number
-  latitude: number
+interface PolygonPoint { 
+longitude:number 
+latitude: number
 }
 
-interface WaypointOptimizeRequest {
-  polygon_coords: PolygonPoint[]
-  flight_height_m: number
-  gsd_cm?: number
-  overlap_front?: number
-  overlap_side?: number
-  gimbal_pitch?: number
-  main_angle?: number
-  camera_mode?: string
-  use_set_cover?: boolean
-  use_tsp?: boolean
+interface WaypointOptimizeRequest { 
+polygon_coords: PolygonPoint[] 
+flight_height_m: number 
+gsd_cm?: number 
+overlap_front?: number 
+overlap_side?: number 
+gimbal_pitch?: number 
+main_angle?: number 
+camera_mode?: string 
+use_set_cover?: boolean 
+use_tsp?: boolean
 }
 
-interface OptimizedWaypoint {
-  lng: number
-  lat: number
-  height: number
-  pitch?: number
+interface OptimizedWaypoint { 
+lng: number 
+lat: number 
+height: number 
+pitch?: number
 }
 
-interface OptimizationStats {
-  total_candidates: number
-  selected_waypoints: number
-  reduction_rate: number
-  coverage_rate: number
+interface OptimizationStats { total_candidates: number 
+selected_waypoints: number 
+reduction_rate: number 
+coverage_rate: number
 }
 
-interface WaypointOptimizeResponse {
-  code: number
-  message: string
-  data: {
-    waypoints: OptimizedWaypoint[]
-    stats: OptimizationStats
-  }
+interface WaypointOptimizeResponse { 
+code: number 
+message: string 
+data: { 
+waypoints: OptimizedWaypoint[] 
+stats: OptimizationStats 
+}
 }
 ```
 
-### 使用示例
+### Usage examples
 
 ```typescript
 import axios from 'axios'
-
 const OPTIMIZER_BASE_URL = 'http://localhost:9527'
-
-async function optimizeWaypoints(params: WaypointOptimizeRequest): Promise<WaypointOptimizeResponse> {
-  const url = `${OPTIMIZER_BASE_URL}/api/v1/wayline/optimize`
-  
-  try {
-    const response = await axios.post<WaypointOptimizeResponse>(url, params, {
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      timeout: 30000,
-    })
-    
-    if (response.data.code !== 0) {
-      throw new Error(response.data.message || '优化失败')
-    }
-    
-    return response.data
-  } catch (error: any) {
-    console.error('航点优化API调用失败:', error)
-    throw error
-  }
+async function optimizeWaypoints(params: WaypointOptimizeRequest): Promise<WaypointOptimizeResponse> { 
+const url = `${OPTIMIZER_BASE_URL}/api/v1/wayline/optimize` 
+try { 
+const response = await axios.post<WaypointOptimizeResponse>(url, params, { 
+headers: { 'Content-Type': 'application/json',
+},
+timeout: 30000,
+})
+if (response.data.code !== 0) {
+throw new Error(response.data.message || 'Optimization failed')
 }
-
-// 调用示例
+return response.data
+} catch (error: any) {
+console.error('Waypoint optimization API call failed:', error)
+throw error
+}
+}
+// Example call
 const params: WaypointOptimizeRequest = {
-  polygon_coords: [
-    { longitude: 116.3974, latitude: 39.9093 },
-    { longitude: 116.4074, latitude: 39.9093 },
-    { longitude: 116.4074, latitude: 39.9193 },
-    { longitude: 116.3974, latitude: 39.9193 }
-  ],
-  flight_height_m: 100,
-  gsd_cm: 2.5,
-  overlap_front: 0.6,
-  overlap_side: 0.4,
-  gimbal_pitch: -90,
-  main_angle: 0,
-  camera_mode: 'wide',
-  use_set_cover: true,
-  use_tsp: true
+polygon_coords: [
+{ longitude: 116.3974, latitude: 39.9093 },
+{ longitude: 116.4074, latitude: 39.9093 },
+{ longitude: 116.4074, latitude: 39.9193 },
+{ longitude: 116.3974, latitude: 39.9193 }
+],
+flight_height_m: 100,
+gsd_cm: 2.5,
+overlap_front: 0.6,
+overlap_side: 0.4,
+gimbal_pitch: -90,
+main_angle: 0,
+camera_mode: 'wide',
+use_set_cover: true,
+use_tsp: true
 }
-
 const result = await optimizeWaypoints(params)
-console.log(`生成了 ${result.data.waypoints.length} 个航点`)
-console.log(`减少率: ${(result.data.stats.reduction_rate * 100).toFixed(1)}%`)
+console.log(`Generated ${result.data.waypoints.length} waypoints`)
+console.log(`Reduction rate: ${(result.data.stats.reduction_rate * 100).toFixed(1)}%`)
 ```
 
-### 配置说明
+### Configuration Instructions
 
-**注意**：后端已配置为使用 `snake_case` 命名策略（通过 `JacksonConfig`），因此前端可以直接使用下划线命名，无需转换。
+**Note**: The backend is configured to use the `snake_case` naming strategy (via (JacksonConfig), so the frontend can directly use underscores in the naming without conversion.
+The default base URL is `http://localhost:9527`. To modify it, update the `OPTIMIZER_BASE_URL` constant in the frontend code.
 
-默认的基础URL是 `http://localhost:9527`。如需修改，请在前端代码中更新 `OPTIMIZER_BASE_URL` 常量。
+## Parameter Description
 
-## 参数说明
+### Required Parameters
 
-### 必需参数
+- **polygon_coords**: Array of polygon vertices (at least 3 points)
+  
+- Format for each point: `{longitude: number, latitude: number}`
+  
+- **flight_height_m**: Flight altitude (meters)
+  
 
-- **polygon_coords**：多边形顶点数组（至少3个点）
-  - 每个点格式：`{longitude: number, latitude: number}`
-- **flight_height_m**：飞行高度（米）
+###### Optional Parameters
 
-### 可选参数
+- **gsd_cm**: Ground sampling distance (cm/pixel, for verification)
+  
+- **overlap_front**: Forward overlap ratio (0.0-1.0, default: 0.6)
+  
+- **overlap_side**: Lateral overlap ratio (0.0-1.0, default: 0.4)
+  
+- **gimbal_pitch**: Gimbal pitch angle (degrees, -90 to -45, default: -90)
+  
+- -90°: Orthographic (vertically downward)
+  
+- -45°: Tilt
+  
+- **main_angle**: Main flight direction angle (degrees, default: 0)
+  
+- **camera_mode**: Camera mode (`'wide'`, `'medium_tele'`, `'tele'`, default: `'wide'`)
+  
+- **use_set_cover**: Enable set coverage optimization (default: true)
+  
+- **use_tsp**: Enable TSP path optimization (default: true)
+  
 
-- **gsd_cm**：地面采样距离（厘米/像素，用于验证）
-- **overlap_front**：前向重叠率（0.0-1.0，默认：0.6）
-- **overlap_side**：侧向重叠率（0.0-1.0，默认：0.4）
-- **gimbal_pitch**：云台俯仰角（度，-90到-45，默认：-90）
-  - -90°：正射（垂直向下）
-  - -45°：倾斜
-- **main_angle**：主飞行方向角度（度，默认：0）
-- **camera_mode**：相机模式（`'wide'`、`'medium_tele'`、`'tele'`，默认：`'wide'`）
-- **use_set_cover**：启用集合覆盖优化（默认：true）
-- **use_tsp**：启用TSP路径优化（默认：true）
+### Camera Modes
 
-### 相机模式
+- **wide**: Wide-angle lens (24mm focal length)
+  
+- **medium_tele**: Medium telephoto lens (70mm focal length)
+  
+- **tele**: Telephoto lens (168mm focal length)
+  
 
-- **wide**：广角镜头（24mm焦距）
-- **medium_tele**：中长焦镜头（70mm焦距）
-- **tele**：长焦镜头（168mm焦距）
+## Project Structure
 
-## 项目结构
 ```
 java-route/
 ├── src/
-│   ├── main/
-│   │   ├── java/com/example/java_route/
-│   │   │   ├── config/
-│   │   │   │   ├── AppConfig.java          # 应用配置
-│   │   │   │   ├── CorsConfig.java         # CORS配置
-│   │   │   │   └── JacksonConfig.java      # JSON命名策略配置（snake_case）
-│   │   │   ├── controller/
-│   │   │   │   └── WaylineController.java  # REST API控制器
-│   │   │   ├── core/
-│   │   │   │   ├── CameraModel.java        # 相机模型和GSD计算
-│   │   │   │   ├── CameraProfile.java      # 相机配置
-│   │   │   │   ├── CandidateGenerator.java # 网格候选点生成
-│   │   │   │   ├── CoverageMapper.java     # 覆盖单元映射
-│   │   │   │   ├── MissionOptimizer.java   # 主优化逻辑
-│   │   │   │   ├── SetCoverSolver.java     # 集合覆盖算法
-│   │   │   │   └── TspSolver.java          # TSP求解器
-│   │   │   ├── dto/
-│   │   │   │   ├── PolygonPoint.java       # 多边形顶点DTO
-│   │   │   │   ├── Waypoint.java           # 航点DTO
-│   │   │   │   ├── WaypointOptimizeRequest.java  # 优化请求DTO
-│   │   │   │   └── WaypointOptimizeResponse.java # 优化响应DTO
-│   │   │   ├── utils/
-│   │   │   │   ├── CoordinatesUtils.java   # 坐标转换工具
-│   │   │   │   └── GeometryUtils.java      # 几何工具
-│   │   │   └── JavaRouteApplication.java   # Spring Boot主类
-│   │   └── resources/
-│   │       └── application.properties      # 应用配置文件
-│   └── test/
-│       └── java/                           # 测试代码
-├── pom.xml                                 # Maven配置文件
-└── README.md                               # 本文档
+│ ├── main/
+│ │ ├── java/com/example/java_route/
+│ │ │ ├── config/
+│ │ │ │ ├── AppConfig.java # Application configuration
+│ │ │ │ ├── CorsConfig.java # CORS configuration
+│ │ │ │ └── JacksonConfig.java # JSON naming strategy configuration (snake_case)
+│ │ │ ├── controller/
+│ │ │ │ └── WaylineController.java # REST API controller
+│ │ │ ├── core/
+│ │ │ │ ├── CameraModel.java # Camera model and GSD calculation
+│ │ │ │ ├── CameraProfile.java # Camera configuration
+│ │ │ │ ├── CandidateGenerator.java # Mesh candidate point generation
+│ │ │ │ ├── CoverageMapper.java # Coverage cell mapping
+│ │ │ │ ├── MissionOptimizer.java # Main optimization logic
+│ │ │ │ ├── SetCoverSolver.java # Set cover algorithm
+│ │ │ │ └── TspSolver.java # TSP solver
+│ │ │ ├── dto/
+│ │ │ │ ├── PolygonPoint.java # Polygon vertex DTO
+│ │ │ │ ├── Waypoint.java # Waypoint DTO
+│ │ │ │ ├── WaypointOptimizeRequest.java # Optimize request DTO
+│ │ │ │ └── WaypointOptimizeResponse.java # Optimize response DTO
+│ │ │ ├── utils/
+│ │ │ │ ├── CoordinatesUtils.java # Coordinate transformation tool
+│ │ │ │ └── GeometryUtils.java # Geometry tool
+│ │ │ └── JavaRouteApplication.java # Spring Boot main class
+│ │ └── resources/
+│ │ └── application.properties # Application configuration file
+│ └── test/
+│ └── java/ # Test code
+├── pom.xml # Maven configuration file
+└── README.md # This document
 ```
 
-### 主要依赖
-
-- **Spring Boot 3.5.7** - Web框架
-- **Lombok** - 减少样板代码
-- **OR-Tools 9.8.3296** - TSP求解器
-- **JTS Topology Suite 1.19.0** - 几何计算（替代 Python 的 Shapely）
-- **Apache Commons Math 3.6.1** - 数值计算
-
-### JSON 命名策略
-
-项目已配置为使用 `snake_case` 命名策略（在 `JacksonConfig` 中），与 Python 版本保持一致。这意味着：
-
-- 请求/响应中的字段名使用下划线：`polygon_coords`、`flight_height_m`
-- Java 类中的字段名使用驼峰：`polygonCoords`、`flightHeightM`
-- Jackson 会自动进行转换
+### Main Dependencies
+- **Spring Boot 3.5.7** - Web framework
+- **Lombok** - Reduce boilerplate code
+**OR-Tools 9.8.3296** - TSP solver
+**JTS Topology Suite 1.19.0** - Geometric computation (an alternative to Shapely for Python)
+**Apache Commons Math 3.6.1** - Numerical computation
+### JSON Naming Strategy
+The project is configured to use the `snake_case` naming strategy (in `JacksonConfig`), consistent with the Python version. This means:
+- Field names in requests/responses use underscores: `polygon_coords`, `flight_height_m`
+- Field names in Java classes use camelCase: `polygonCoords`, `flightHeightM`
+- Jackson will automatically perform the conversion.
